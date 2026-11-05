@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
@@ -65,6 +66,34 @@ try {
   console.log('Screenshot approximate distinct RGB colors:', colors);
   assert.ok(colors > 8, 'Canvas looks blank: screenshot has too few color variations');
   assert.deepEqual(errors, [], 'Browser had runtime or asset errors');
+
+  // Exercise actual PixiJS map picking, movement range highlight and moving
+  // one unit. Coordinates are derived from the loaded map's axial grid.
+  const definition = JSON.parse(readFileSync(
+    new URL('../public/maps/asteria/map.json', import.meta.url), 'utf8',
+  ));
+  const g = definition.grid;
+  const fit = Math.min((1280 - 24) / g.worldWidth, (800 - 24) / g.worldHeight);
+  const cameraX = (1280 - g.worldWidth * fit) / 2;
+  const cameraY = (800 - g.worldHeight * fit) / 2;
+  const screen = (q, r) => ({
+    x: cameraX + (g.originX + Math.sqrt(3) * g.radius * (q + r / 2)) * fit,
+    y: cameraY + (g.originY + 1.5 * g.radius * r) * fit,
+  });
+  const screenshotBeforeClick = await page.screenshot({ animations: 'disabled' });
+  await page.mouse.click(screen(6, 5).x, screen(6, 5).y); // Aurelia infantry
+  await page.waitForTimeout(180);
+  const screenshotAfterSelection = await page.screenshot({ animations: 'disabled' });
+  assert.notDeepEqual(screenshotAfterSelection, screenshotBeforeClick,
+    'Selecting a ground unit must visibly highlight reachable Hexes');
+  await page.mouse.click(screen(5, 5).x, screen(5, 5).y); // adjacent empty land
+  await page.waitForTimeout(180);
+  const screenshotAfterMove = await page.screenshot({ animations: 'disabled' });
+  assert.notDeepEqual(screenshotAfterMove, screenshotAfterSelection,
+    'Clicking a reachable Hex must move the selected unit');
+  assert.deepEqual(errors, [], 'Browser movement interaction caused an error');
+  console.log('Ground unit selection and click-to-move changed the rendered map');
+
 
   const failing = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await failing.goto(host + '?scenario=does-not-exist', { waitUntil: 'domcontentloaded' });

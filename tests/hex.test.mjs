@@ -136,3 +136,121 @@ test('城市图标 SVG 源文件仍然保留', () => {
     assert.match(svg, /<\/svg>/);
   }
 });
+
+test('初始剧本地面单位有效，单位进入不可变 RenderSnapshot', () => {
+  const world = new GameWorld(map, scenario);
+  assert.equal(world.units.length, 15);
+  assert.equal(new Set(world.units.map(unit => unit.hexId)).size, world.units.length);
+  assert.ok(world.units.every(unit => unit.hp === 100 && unit.maxHp === 100 && unit.mpRemaining === unit.maxMp));
+  const snapshot = buildRenderSnapshot(world);
+  assert.equal(snapshot.units.length, 15);
+  assert.ok(Object.isFrozen(snapshot.units) && snapshot.units.every(Object.isFrozen));
+  assert.equal(snapshot.units[0].hexId, world.units[0].hexId);
+  const changed = world.units[0];
+  assert.equal(world.unitById(changed.id)?.hexId, changed.hexId);
+
+  const invalid = structuredClone(scenario);
+  invalid.initialUnits[1].hexId = invalid.initialUnits[0].hexId;
+  assert.throws(() => new GameWorld(map, invalid), /占据/);
+});
+
+function corridorScenario(units) {
+  const narrowMap = createMapData({
+    id: 'corridor', name: '走廊', version: 1,
+    grid: { orientation: 'pointy', cols: 5, rows: 1, radius: 20,
+      originX: 25, originY: 25, worldWidth: 250, worldHeight: 80 },
+    terrains: ['ocean', 'plains', 'forest'],
+    provinces: [{ id: 'left', name: '左' }, { id: 'right', name: '右' }],
+    tiles: [[0,1],[0,1],[0,1],[1,1],[1,1]],
+    cities: [],
+  });
+  const scenario = {
+    id: 'corridor-start', name: '走廊测试', version: 1, mapId: 'corridor',
+    countries: [{ id: 'a', name: 'A', color: 0xabcdef }, { id: 'b', name: 'B', color: 0xfedcba }],
+    provinceSovereignty: { left: 'a', right: 'b' },
+    initialUnits: units,
+  };
+  return new GameWorld(narrowMap, scenario);
+}
+
+test('友军占据的 Hex 可作为中转但不可停留，敌军所在格不可穿越', () => {
+  const world = corridorScenario([
+    { id: 'actor', countryId: 'a', kind: 'infantry', hexId: '0,0' },
+    { id: 'friend', countryId: 'a', kind: 'infantry', hexId: '1,0' },
+    { id: 'enemy', countryId: 'b', kind: 'infantry', hexId: '4,0' },
+  ]);
+  const possible = world.reachableFor('actor');
+  assert.equal(possible.has('1,0'), false);
+  assert.equal(possible.get('2,0')?.cost, 2);
+  assert.deepEqual(possible.get('2,0')?.hexIds, ['0,0', '1,0', '2,0']);
+  assert.equal(possible.has('4,0'), false);
+  assert.equal(possible.has('3,0'), false); // enemy ZOC +2 exceeds remaining infantry MP
+  const prevRevision = world.revision;
+  assert.throws(() => world.moveUnit('actor', '4,0'), /无法移动/);
+  assert.equal(world.revision, prevRevision);
+  assert.equal(world.unitById('actor').mpRemaining, 3);
+  world.moveUnit('actor', '2,0');
+  assert.equal(world.unitById('actor').hexId, '2,0');
+  assert.equal(world.unitById('actor').mpRemaining, 1);
+  assert.equal(world.revision, prevRevision + 1);
+});
+
+test('坦克可以支付 ZOC 移动惩罚后深入敌境，沿途无人守军 Hex 被占领', () => {
+  const world = corridorScenario([
+    { id: 'tank', countryId: 'a', kind: 'tank', hexId: '2,0' },
+    { id: 'defender', countryId: 'b', kind: 'infantry', hexId: '4,0' },
+  ]);
+  const initial = buildRenderSnapshot(world);
+  assert.equal(world.reachableFor('tank').get('3,0')?.cost, 3); // plain 1 + ZOC 2
+  assert.equal(world.reachableFor('tank').has('4,0'), false);
+  const route = world.moveUnit('tank', '3,0');
+  assert.deepEqual(route.hexIds, ['2,0', '3,0']);
+  assert.equal(world.unitById('tank').mpRemaining, 4);
+  assert.equal(world.controllerOf('3,0'), 'a');
+  assert.equal(world.controllerOf('4,0'), 'b');
+  assert.equal(world.unitById('defender').hexId, '4,0');
+  assert.equal(initial.hexes.find(x => x.hexId === '3,0').controllerId, 'b');
+  assert.equal(buildRenderSnapshot(world).hexes.find(x => x.hexId === '3,0').controllerId, 'a');
+  assert.throws(() => world.moveUnit('tank', '4,0'), /无法移动/);
+});
+
+test('反坦克炮只压制坦克移动，火炮没有移动 ZOC', () => {
+  for (const kind of ['antiTank', 'artillery']) {
+    for (const mover of ['tank', 'infantry']) {
+      const world = corridorScenario([
+        { id: 'mover', countryId: 'a', kind: mover, hexId: '1,0' },
+        { id: 'enemy', countryId: 'b', kind, hexId: '4,0' },
+      ]);
+      const cost = world.reachableFor('mover').get('2,0')?.cost;
+      assert.equal(cost, kind === 'antiTank' && mover === 'tank' ? 3 : 1,
+        `${kind} vs ${mover}`);
+    }
+  }
+});
+
+test('地形消耗正确，海水禁止陆军通行', () => {
+  const modified = structuredClone({
+    id: 'terrain', name: '地形测试', version: 1,
+    grid: { orientation: 'pointy', cols: 4, rows: 1, radius: 20,
+      originX: 25, originY: 25, worldWidth: 240, worldHeight: 80 },
+    terrains: ['ocean', 'plains', 'forest', 'hills'],
+    provinces: [{ id: 'p', name: '省份' }],
+    tiles: [[0,1],[0,2],[-1,0],[0,3]],
+    cities: [],
+  });
+  // Two land islands would invalidate disconnected provinces, so use
+  // a separate province for the isolated hill.
+  modified.provinces.push({ id: 'island', name: '岛' });
+  modified.tiles[3] = [1,3];
+  const islandMap = createMapData(modified);
+  const camp = {
+    id: 'terrain-start',name:'start',version:1,mapId:'terrain',
+    countries:[{id:'a',name:'A',color:0xabcdef}],
+    provinceSovereignty:{p:'a',island:'a'},
+    initialUnits:[{id:'foot',countryId:'a',kind:'infantry',hexId:'0,0'}],
+  };
+  const world = new GameWorld(islandMap, camp);
+  assert.equal(world.reachableFor('foot').get('1,0')?.cost, 2);
+  assert.equal(world.reachableFor('foot').has('2,0'), false);
+  assert.equal(world.reachableFor('foot').has('3,0'), false);
+});

@@ -15,6 +15,7 @@ export function buildRenderSnapshot(world: GameWorld): RenderSnapshot {
     cities: Object.freeze(world.map.cities.map(city => Object.freeze({
       cityId: city.id, controllerId: world.controllerOf(city.hexId),
     }))),
+    units: Object.freeze(world.units.map(unit => Object.freeze({ ...unit }))),
   };
   return Object.freeze(snapshot);
 }

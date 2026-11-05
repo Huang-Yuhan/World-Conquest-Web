@@ -18,10 +18,22 @@ export interface CountryRenderState {
   readonly color: number;
 }
 
+export interface UnitRenderState {
+  readonly id: string;
+  readonly countryId: string;
+  readonly kind: 'infantry' | 'tank' | 'antiTank' | 'artillery';
+  readonly hexId: string;
+  readonly hp: number;
+  readonly maxHp: number;
+  readonly mpRemaining: number;
+  readonly maxMp: number;
+}
+
 export interface RenderSnapshot {
   readonly mapId: string;
   readonly revision: number;
   readonly countries: readonly CountryRenderState[];
   readonly hexes: readonly HexRenderState[];
   readonly cities: readonly CityRenderState[];
+  readonly units: readonly UnitRenderState[];
 }

@@ -43,3 +43,21 @@ export function hexCorners(hex: Axial, grid: GridDefinition): Point[] {
     return { x: x + grid.radius * Math.cos(angle), y: y + grid.radius * Math.sin(angle) };
   });
 }
+
+/** Inverse pointy-top transform with cube rounding for stable click picking. */
+export function pixelToHex(point: Point, grid: GridDefinition): Axial {
+  const x = point.x - grid.originX;
+  const y = point.y - grid.originY;
+  const fractionalQ = (ROOT3 / 3 * x - y / 3) / grid.radius;
+  const fractionalR = (2 / 3 * y) / grid.radius;
+
+  let cubeX = Math.round(fractionalQ);
+  let cubeZ = Math.round(fractionalR);
+  const cubeY = Math.round(-fractionalQ - fractionalR);
+  const dx = Math.abs(cubeX - fractionalQ);
+  const dy = Math.abs(cubeY + fractionalQ + fractionalR);
+  const dz = Math.abs(cubeZ - fractionalR);
+  if (dx > dy && dx > dz) cubeX = -cubeY - cubeZ;
+  else if (dz > dy) cubeZ = -cubeX - cubeY;
+  return { q: cubeX, r: cubeZ };
+}
