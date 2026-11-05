@@ -116,6 +116,10 @@ try {
   assert.match(await status.innerText(), /第 1 轮/);
   assert.match(await status.innerText(), /奥瑞利亚王国/);
   await endTurn.click();
+  await page.waitForFunction(
+    () => document.querySelector('.turn-hud__status')?.textContent?.includes('北境联盟'),
+    { timeout: 10000 },
+  );
   assert.match(await status.innerText(), /北境联盟/);
   assert.match(await status.innerText(), /2\/5/);
 
@@ -131,6 +135,10 @@ try {
   assert.notDeepEqual(await page.screenshot({ animations: 'disabled' }), screenAfterTurn,
     'Active country unit should still be selectable');
   for (let turn = 0; turn < 4; turn++) await endTurn.click();
+  await page.waitForFunction(
+    () => document.querySelector('.turn-hud__status')?.textContent?.includes('第 2 轮'),
+    { timeout: 10000 },
+  );
   assert.match(await status.innerText(), /第 2 轮/);
   assert.match(await status.innerText(), /奥瑞利亚王国/);
   assert.deepEqual(errors, [], 'Hot-seat turn switching caused a browser error');
