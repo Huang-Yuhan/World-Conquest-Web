@@ -28,3 +28,30 @@ body {
 .map-canvas canvas {
   display: block;
 }
+
+/* No gameplay HUD. Only show diagnostics if the map fails to boot. */
+.map-error {
+  position: absolute;
+  z-index: 10;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 24px 28px;
+  border: 1px solid #9f6b59;
+  border-radius: 12px;
+  color: #fff0df;
+  background: #182d38;
+  font: 14px/1.65 system-ui, "Microsoft YaHei", sans-serif;
+  overflow-wrap: anywhere;
+  box-shadow: 0 10px 30px #0006;
+}
+.map-error strong { font-size: 18px; }
+.map-error button {
+  cursor: pointer;
+  color: #142d36;
+  background: #e2c28a;
+  border: 0;
+  border-radius: 5px;
+  padding: 9px 16px;
+}

@@ -119,21 +119,8 @@ export class MapRenderer {
     this.createTiles();
     this.createStaticBorders();
 
-    // Rasterize the original SVG sources at high resolution once; the icon
-    // size is held constant in screen pixels as the map camera zooms.
-    const [city, capital, distant] = await Promise.all([
-      Assets.load<Texture>({ src: cityIconUrl, data: { resolution: 4 } }),
-      Assets.load<Texture>({ src: capitalIconUrl, data: { resolution: 4 } }),
-      Assets.load<Texture>({ src: cityMarkerUrl, data: { resolution: 4 } }),
-    ]);
-    if (this.destroyed) return;
-
-    for (const cityDefinition of this.map.cities) {
-      const marker = createMarker(cityDefinition, this.map, { city, capital, distant });
-      this.cityMarkers.push(marker);
-      this.cityLayer.addChild(marker.node);
-    }
-
+    // The terrain and first RenderSnapshot must never depend on SVG loading.
+    // Set up the camera immediately, then stream city graphics asynchronously.
     this.host.addEventListener('pointerdown', this.pointerDown);
     this.host.addEventListener('pointermove', this.pointerMove);
     this.host.addEventListener('pointerup', this.pointerUp);
@@ -141,6 +128,27 @@ export class MapRenderer {
     this.host.addEventListener('wheel', this.wheel, { passive: false });
     window.addEventListener('resize', this.fitToScreen);
     this.fitToScreen();
+
+    void this.loadCitySprites().catch(error => {
+      if (!this.destroyed) console.error('城市 SVG 素材加载失败：', error);
+    });
+  }
+
+  private async loadCitySprites(): Promise<void> {
+    // SVG is still rasterized at high resolution and icons remain
+    // constant-sized in screen pixels while zooming.
+    const [city, capital, distant] = await Promise.all([
+      Assets.load<Texture>({ src: cityIconUrl, data: { resolution: 4 } }),
+      Assets.load<Texture>({ src: capitalIconUrl, data: { resolution: 4 } }),
+      Assets.load<Texture>({ src: cityMarkerUrl, data: { resolution: 4 } }),
+    ]);
+    if (this.destroyed) return;
+    for (const cityDefinition of this.map.cities) {
+      const marker = createMarker(cityDefinition, this.map, { city, capital, distant });
+      this.cityMarkers.push(marker);
+      this.cityLayer.addChild(marker.node);
+    }
+    this.updateCamera();
   }
 
   private createTiles(): void {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loadMap } from '../map/MapLoader.ts';
 import { GameWorld } from '../gameplay/GameWorld.ts';
 import { loadScenario } from '../gameplay/ScenarioLoader.ts';
@@ -8,6 +8,7 @@ import { MapRenderer } from './MapRenderer.ts';
 /** React is only the host/composition root, not the map simulation or renderer. */
 export function MapCanvas() {
   const hostRef = useRef<HTMLDivElement>(null);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -32,7 +33,10 @@ export function MapCanvas() {
     }
 
     void start().catch(error => {
-      if (!abort.signal.aborted) console.error('地图加载失败：', error);
+      if (!abort.signal.aborted) {
+        console.error('地图加载失败：', error);
+        setLoadingError(error instanceof Error ? error.message : String(error));
+      }
     });
 
     return () => {
@@ -41,5 +45,13 @@ export function MapCanvas() {
     };
   }, []);
 
-  return <div ref={hostRef} className="map-canvas" aria-label="六边形政治地图" />;
+  return <div ref={hostRef} className="map-canvas" aria-label="六边形政治地图">
+    {loadingError && (
+      <div className="map-error" role="alert">
+        <strong>地图加载失败</strong>
+        <p>{loadingError}</p>
+        <button type="button" onClick={() => window.location.reload()}>重新加载</button>
+      </div>
+    )}
+  </div>;
 }

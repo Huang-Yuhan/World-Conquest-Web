@@ -33,12 +33,16 @@ jobs:
         run: npm test
       - name: Build Vite production assets
         run: npm run build
+      - name: Install browser for smoke test
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke test (production preview)
+        run: npm run test:browser
       - name: Configure Pages
         if: github.event_name != 'pull_request'
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
@@ -57,4 +61,19 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
+
+      - name: Verify live Pages resources
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          base="${PAGE_URL%/}"
+          for path in "/" "/scenarios/asteria-1936.json" "/maps/asteria/map.json"; do
+            echo "Checking ${base}${path}"
+            curl --fail --location --silent --show-error \
+              --retry 8 --retry-delay 3 --retry-all-errors --max-time 15 \
+              "${base}${path}" -o "/tmp/pages-$(echo "${path}" | tr '/' '_')"
+          done
+          grep -q 'World-Conquest-Web/assets/' "/tmp/pages-_"
+          node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('/tmp/pages-_maps_asteria_map.json'));if(m.id!=='asteria')process.exit(1)"
