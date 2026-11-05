@@ -30,9 +30,17 @@ export interface UnitRenderState {
   readonly attacksRemaining: number;
 }
 
+export interface TurnRenderState {
+  readonly round: number;
+  readonly activeCountryId: string;
+  readonly countryIndex: number;
+  readonly countryCount: number;
+}
+
 export interface RenderSnapshot {
   readonly mapId: string;
   readonly revision: number;
+  readonly turn: TurnRenderState;
   readonly countries: readonly CountryRenderState[];
   readonly hexes: readonly HexRenderState[];
   readonly cities: readonly CityRenderState[];

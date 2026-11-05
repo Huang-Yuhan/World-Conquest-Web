@@ -4,11 +4,34 @@ import { GameWorld } from '../gameplay/GameWorld.ts';
 import { loadScenario } from '../gameplay/ScenarioLoader.ts';
 import { buildRenderSnapshot } from '../gameplay/RenderSnapshotBuilder.ts';
 import { MapRenderer } from './MapRenderer.ts';
+import type { RenderSnapshot } from '../contracts/RenderSnapshot.ts';
+
+type TurnHud = {
+  readonly round: number;
+  readonly countryIndex: number;
+  readonly countryCount: number;
+  readonly countryName: string;
+  readonly color: number;
+};
+
+function createTurnHud(snapshot: RenderSnapshot): TurnHud {
+  const active = snapshot.countries.find(country => country.id === snapshot.turn.activeCountryId);
+  if (!active) throw new Error('当前国家不存在于 RenderSnapshot');
+  return {
+    round: snapshot.turn.round,
+    countryIndex: snapshot.turn.countryIndex,
+    countryCount: snapshot.turn.countryCount,
+    countryName: active.name,
+    color: active.color,
+  };
+}
 
 /** React is only the host/composition root, not the map simulation or renderer. */
 export function MapCanvas() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [turnHud, setTurnHud] = useState<TurnHud | null>(null);
+  const endTurnRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -19,6 +42,21 @@ export function MapCanvas() {
     let gameWorld: GameWorld | undefined;
     let selectedUnitId: string | null = null;
 
+    const publish = (): void => {
+      if (!renderer || !gameWorld || abort.signal.aborted) return;
+      const snapshot = buildRenderSnapshot(gameWorld);
+      renderer.submitSnapshot(snapshot);
+      setTurnHud(createTurnHud(snapshot));
+    };
+
+    endTurnRef.current = () => {
+      if (!renderer || !gameWorld || abort.signal.aborted) return;
+      gameWorld.endTurn();
+      selectedUnitId = null; // Never carry a country's selection into another turn.
+      publish();
+      renderer.setSelection(null, [], []);
+    };
+
     const onHexClick = (hexId: string): void => {
       if (abort.signal.aborted || !renderer || !gameWorld) return;
       const standingUnit = gameWorld.unitAt(hexId);
@@ -28,9 +66,13 @@ export function MapCanvas() {
         // A selected unit attacks an in-range enemy instead of selecting it.
         gameWorld.attackUnit(selected.id, hexId);
         if (!gameWorld.unitById(selected.id)) selectedUnitId = null;
-        renderer.submitSnapshot(buildRenderSnapshot(gameWorld));
+        publish()
       } else if (standingUnit) {
-        selectedUnitId = standingUnit.id;
+        // In hot-seat mode, enemy units remain visible, but only the active
+        // country's units may be selected and issued commands.
+        selectedUnitId = standingUnit.countryId === gameWorld.activeCountryId
+          ? standingUnit.id
+          : null;
       } else if (selectedUnitId && gameWorld.reachableFor(selectedUnitId).has(hexId)) {
         gameWorld.moveUnit(selectedUnitId, hexId);
         renderer.submitSnapshot(buildRenderSnapshot(gameWorld));
@@ -56,7 +98,7 @@ export function MapCanvas() {
       renderer = instance;
       await instance.initialize();
       if (abort.signal.aborted) return;
-      instance.submitSnapshot(buildRenderSnapshot(gameWorld));
+      publish();
     }
 
     void start().catch(error => {
@@ -68,11 +110,34 @@ export function MapCanvas() {
 
     return () => {
       abort.abort();
+      endTurnRef.current = null;
       renderer?.destroy();
     };
   }, []);
 
   return <div ref={hostRef} className="map-canvas" aria-label="六边形政治地图">
+    {turnHud && (
+      <div
+        className="turn-hud"
+        aria-label="回合控制"
+        onPointerDown={event => event.stopPropagation()}
+        onPointerUp={event => event.stopPropagation()}
+        onWheel={event => event.stopPropagation()}
+      >
+        <div className="turn-hud__status" aria-live="polite">
+          <span className="turn-hud__round">
+            第 {turnHud.round} 轮 · {turnHud.countryIndex}/{turnHud.countryCount}
+          </span>
+          <span className="turn-hud__country">
+            <span className="turn-hud__swatch" style={{ backgroundColor: `#${turnHud.color.toString(16).padStart(6, '0')}` }} />
+            {turnHud.countryName}
+          </span>
+        </div>
+        <button type="button" className="turn-hud__next" onClick={() => endTurnRef.current?.()}>
+          结束回合
+        </button>
+      </div>
+    )}
     {loadingError && (
       <div className="map-error" role="alert">
         <strong>地图加载失败</strong>

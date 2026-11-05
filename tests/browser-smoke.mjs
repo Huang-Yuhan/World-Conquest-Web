@@ -109,6 +109,33 @@ try {
   assert.deepEqual(errors, [], 'Browser combat interaction caused an error');
   console.log('Ground combat click changed HP bars and exhausted the attack indicator');
 
+  // Full hot-seat turn cycle: verify country order and round rollover.
+  const endTurn = page.getByRole('button', { name: '结束回合' });
+  assert.equal(await endTurn.count(), 1);
+  const status = page.locator('.turn-hud__status');
+  assert.match(await status.innerText(), /第 1 轮/);
+  assert.match(await status.innerText(), /奥瑞利亚王国/);
+  await endTurn.click();
+  assert.match(await status.innerText(), /北境联盟/);
+  assert.match(await status.innerText(), /2\/5/);
+
+  // Non-active units may be inspected visually, but cannot be selected or commanded.
+  const screenAfterTurn = await page.screenshot({ animations: 'disabled' });
+  await page.mouse.click(screen(6, 5).x, screen(6, 5).y); // inactive Aurelia unit
+  await page.waitForTimeout(150);
+  assert.deepEqual(await page.screenshot({ animations: 'disabled' }), screenAfterTurn,
+    'Inactive country unit must not create a selection highlight');
+
+  await page.mouse.click(screen(7, 5).x, screen(7, 5).y); // active Nordland unit
+  await page.waitForTimeout(150);
+  assert.notDeepEqual(await page.screenshot({ animations: 'disabled' }), screenAfterTurn,
+    'Active country unit should still be selectable');
+  for (let turn = 0; turn < 4; turn++) await endTurn.click();
+  assert.match(await status.innerText(), /第 2 轮/);
+  assert.match(await status.innerText(), /奥瑞利亚王国/);
+  assert.deepEqual(errors, [], 'Hot-seat turn switching caused a browser error');
+  console.log('Hot-seat 5-country turn cycle, active selection and round rollover passed');
+
   const failing = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await failing.goto(host + '?scenario=does-not-exist', { waitUntil: 'domcontentloaded' });
   await failing.getByRole('alert').waitFor({ timeout: 12000 });
