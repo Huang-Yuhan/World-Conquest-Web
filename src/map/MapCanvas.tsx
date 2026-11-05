@@ -8,7 +8,7 @@ const holder=useRef<HTMLDivElement>(null),app=useRef<Application|null>(null),sce
 const shapes=useRef(new Map<string,Graphics>()),armyLabels=useRef(new Map<string,Text>()),selected=useRef(selectedId),selectCallback=useRef(onSelect);
 const zoomSeen=useRef(zoomCommand),resetSeen=useRef(resetCommand);selected.current=selectedId;selectCallback.current=onSelect;
 useEffect(()=>{
- const host=holder.current;if(!host)return;
+ const maybeHost=holder.current;if(!maybeHost)return;const host:HTMLDivElement=maybeHost;
  const instance=new Application(),scene=new Container();let disposed=false,scale=1,px=0,py=0,drag:{x:number;y:number;px:number;py:number}|null=null,moved=false,lastDragged=0;
  const camera=()=>{scene.position.set(px,py);scene.scale.set(scale);};
  const fit=()=>{scale=Math.max(.3,Math.min(1.2,Math.min(host.clientWidth/MAP_WIDTH,host.clientHeight/MAP_HEIGHT)*1.08));px=(host.clientWidth-MAP_WIDTH*scale)/2;py=(host.clientHeight-MAP_HEIGHT*scale)/2;camera();};
