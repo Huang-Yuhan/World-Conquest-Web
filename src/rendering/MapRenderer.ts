@@ -20,17 +20,6 @@ interface CityMarker {
   readonly label: Text;
 }
 
-function lighten(color: number, delta: number): number {
-  const channel = (shift: number) => Math.max(0, Math.min(255, ((color >> shift) & 255) + delta));
-  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
-}
-
-function provinceTint(provinceId: string, countryColor: number): number {
-  let hash = 0;
-  for (const char of provinceId) hash = (hash * 31 + char.charCodeAt(0)) | 0;
-  return lighten(countryColor, ((Math.abs(hash) % 7) - 3) * 5);
-}
-
 function edge(graphics: Graphics, from: Point, to: Point, color: number, width: number): void {
   graphics.moveTo(from.x, from.y).lineTo(to.x, to.y).stroke({ color, width });
 }
@@ -205,7 +194,7 @@ export class MapRenderer {
       const color = hex.terrain === 'ocean'
         ? 0x315360
         : controller && countryById.has(controller)
-          ? provinceTint(hex.provinceId!, countryById.get(controller)!.color)
+          ? countryById.get(controller)!.color
           : 0x889493;
       const shape = this.tiles.get(hex.id)!;
       shape.clear()
