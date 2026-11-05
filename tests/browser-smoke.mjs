@@ -118,7 +118,7 @@ try {
   await endTurn.click();
   await page.waitForFunction(
     () => document.querySelector('.turn-hud__status')?.textContent?.includes('北境联盟'),
-    { timeout: 10000 },
+    undefined, { timeout: 10000 },
   );
   assert.match(await status.innerText(), /北境联盟/);
   assert.match(await status.innerText(), /2\/5/);

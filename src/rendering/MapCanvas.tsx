@@ -115,14 +115,14 @@ export function MapCanvas() {
     };
   }, []);
 
-  return <div ref={hostRef} className="map-canvas" aria-label="六边形政治地图">
+  // The HUD must be a sibling, not a descendant, of the PixiJS event host.
+  // That keeps native map pointer capture separate from HTML button clicks.
+  return <div className="map-shell">
+    <div ref={hostRef} className="map-canvas" aria-label="六边形政治地图" />
     {turnHud && (
       <div
         className="turn-hud"
         aria-label="回合控制"
-        onPointerDown={event => event.stopPropagation()}
-        onPointerUp={event => event.stopPropagation()}
-        onWheel={event => event.stopPropagation()}
       >
         <div className="turn-hud__status" aria-live="polite">
           <span className="turn-hud__round">
