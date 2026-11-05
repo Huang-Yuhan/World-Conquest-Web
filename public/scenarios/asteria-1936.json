@@ -1,0 +1,55 @@
+{
+ "id": "asteria-1936",
+ "name": "阿斯特里亚 · 1936",
+ "version": 1,
+ "mapId": "asteria",
+ "countries": [
+  {
+   "id": "aurelia",
+   "name": "奥瑞利亚王国",
+   "color": 13008487
+  },
+  {
+   "id": "nordland",
+   "name": "北境联盟",
+   "color": 9222606
+  },
+  {
+   "id": "vesperia",
+   "name": "维斯佩里亚领邦",
+   "color": 11837906
+  },
+  {
+   "id": "meridia",
+   "name": "梅里迪亚同盟",
+   "color": 7976602
+  },
+  {
+   "id": "solmere",
+   "name": "索尔梅尔共和国",
+   "color": 14661999
+  }
+ ],
+ "provinceSovereignty": {
+  "raven": "aurelia",
+  "arden": "aurelia",
+  "westford": "aurelia",
+  "ironwick": "aurelia",
+  "northwatch": "nordland",
+  "frosthold": "nordland",
+  "snowreach": "nordland",
+  "stormhold": "nordland",
+  "eastmarch": "vesperia",
+  "silvercrest": "vesperia",
+  "southport": "vesperia",
+  "oldhaven": "vesperia",
+  "stonebridge": "meridia",
+  "goldhaven": "meridia",
+  "redwater": "meridia",
+  "greenfield": "meridia",
+  "riverbend": "solmere",
+  "sunreach": "solmere",
+  "clearwater": "solmere",
+  "southcliff": "solmere"
+ }
+}
