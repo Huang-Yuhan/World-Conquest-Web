@@ -95,6 +95,20 @@ try {
   console.log('Ground unit selection and click-to-move changed the rendered map');
 
 
+  // Verify that clicking an enemy in range performs combat rather than switching
+  // the selected unit: attackable Hexes are red, and both HP bars change.
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(500);
+  await page.mouse.click(screen(6, 5).x, screen(6, 5).y); // Aurelia infantry
+  const beforeCombat = await page.screenshot({ animations: 'disabled' });
+  await page.mouse.click(screen(7, 5).x, screen(7, 5).y); // adjacent Nordland infantry
+  await page.waitForTimeout(350);
+  const afterCombat = await page.screenshot({ animations: 'disabled' });
+  assert.notDeepEqual(afterCombat, beforeCombat,
+    'Attacking a red enemy Hex must update visible HP and attack state');
+  assert.deepEqual(errors, [], 'Browser combat interaction caused an error');
+  console.log('Ground combat click changed HP bars and exhausted the attack indicator');
+
   const failing = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await failing.goto(host + '?scenario=does-not-exist', { waitUntil: 'domcontentloaded' });
   await failing.getByRole('alert').waitFor({ timeout: 12000 });

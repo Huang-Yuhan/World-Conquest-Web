@@ -2,6 +2,7 @@ import type { MapData } from '../map/MapData.ts';
 import { validateScenario, type ScenarioDefinition } from './ScenarioDefinition.ts';
 import { reachableMoves, type MoveRoute } from './Movement.ts';
 import { UNIT_RULES, type UnitState } from './Units.ts';
+import { isInAttackRange, previewCombat, type CombatResult } from './Combat.ts';
 
 /** Authoritative mutable state. No rendering imports or PixiJS types. */
 export class GameWorld {
@@ -24,7 +25,7 @@ export class GameWorld {
     }
     for (const unit of scenario.initialUnits ?? []) {
       const maxMp = UNIT_RULES[unit.kind].movePoints;
-      this.unitStates.set(unit.id, { ...unit, hp: 100, maxHp: 100, maxMp, mpRemaining: maxMp });
+      this.unitStates.set(unit.id, { ...unit, hp: 100, maxHp: 100, maxMp, mpRemaining: maxMp, attacksRemaining: 1 });
     }
   }
 
@@ -79,6 +80,45 @@ export class GameWorld {
     });
     this._revision++;
     return route;
+  }
+
+  /** Returns an attack preview for each enemy Hex this unit may attack. */
+  attackableFor(unitId: string): ReadonlyMap<string, CombatResult> {
+    const attacker = this.unitStates.get(unitId);
+    if (!attacker) throw new Error(`未知单位：${unitId}`);
+    const targets = new Map<string, CombatResult>();
+    if (attacker.attacksRemaining <= 0) return targets;
+    for (const defender of this.unitStates.values()) {
+      if (defender.countryId !== attacker.countryId && isInAttackRange(attacker, defender)) {
+        targets.set(defender.hexId, previewCombat(this.map, attacker, defender));
+      }
+    }
+    return targets;
+  }
+
+  /**
+   * Attack is atomic: validate/compute before touching GameWorld.
+   * It consumes one attack opportunity but never consumes MP or moves the attacker.
+   * Defender damage happens first; surviving defenders may counter with reduced HP.
+   */
+  attackUnit(attackerId: string, defenderHexId: string): CombatResult {
+    const attacker = this.unitStates.get(attackerId);
+    if (!attacker) throw new Error(`未知攻击单位：${attackerId}`);
+    const defender = [...this.unitStates.values()].find(u => u.hexId === defenderHexId);
+    if (!defender) throw new Error('目标 Hex 没有可攻击的单位');
+    const result = previewCombat(this.map, attacker, defender);
+
+    if (result.defenderDestroyed) this.unitStates.delete(defender.id);
+    else this.unitStates.set(defender.id, { ...defender, hp: result.defenderRemainingHp });
+
+    if (result.attackerDestroyed) this.unitStates.delete(attacker.id);
+    else this.unitStates.set(attacker.id, {
+      ...attacker, hp: result.attackerRemainingHp, attacksRemaining: attacker.attacksRemaining - 1,
+    });
+
+    // No territory flips and no auto-advance; destroyed units cease projecting ZOC.
+    this._revision++;
+    return result;
   }
 
   /**

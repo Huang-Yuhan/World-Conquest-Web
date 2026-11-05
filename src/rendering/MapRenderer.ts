@@ -83,6 +83,7 @@ export class MapRenderer {
   private cameraY = 0;
   private selectedUnitId: string | null = null;
   private reachableHexIds: readonly string[] = [];
+  private attackableHexIds: readonly string[] = [];
   private drag: {
     id: number; pointerX: number; pointerY: number; cameraX: number; cameraY: number; moved: boolean;
   } | null = null;
@@ -275,9 +276,14 @@ export class MapRenderer {
 
 
   /** Renderer owns interaction visuals; Gameplay owns route calculations. */
-  setSelection(selectedUnitId: string | null, reachableHexIds: readonly string[]): void {
+  setSelection(
+    selectedUnitId: string | null,
+    reachableHexIds: readonly string[],
+    attackableHexIds: readonly string[] = [],
+  ): void {
     this.selectedUnitId = selectedUnitId;
     this.reachableHexIds = [...reachableHexIds];
+    this.attackableHexIds = [...attackableHexIds];
     this.redrawSelection();
   }
 
@@ -291,6 +297,14 @@ export class MapRenderer {
         .poly(hexCorners(hex, this.map.definition.grid))
         .fill({ color: 0xabe2a6, alpha: 0.22 })
         .stroke({ color: 0xa4d69a, alpha: 0.8, width: 2 });
+    }
+    for (const id of this.attackableHexIds) {
+      const hex = this.map.hexesById.get(id);
+      if (!hex) continue;
+      this.selectionLayer
+        .poly(hexCorners(hex, this.map.definition.grid))
+        .fill({ color: 0xef5a52, alpha: 0.32 })
+        .stroke({ color: 0xff766e, alpha: 0.95, width: 2.8 });
     }
     const unit = this.snapshotUnits.find(item => item.id === this.selectedUnitId);
     const hex = unit && this.map.hexesById.get(unit.hexId);
@@ -324,7 +338,19 @@ export class MapRenderer {
         style: { fontFamily: FONT, fontSize: 15, fontWeight: 'bold', fill: 0xffffff },
       });
       label.anchor.set(0.5);
-      container.addChild(symbol, label);
+      // Compact bars make damage visible without introducing an extra HUD.
+      // Symbols remain fixed-size in screen pixels during map zoom.
+      const healthFraction = Math.max(0, Math.min(1, unit.hp / unit.maxHp));
+      const hpBar = new Graphics()
+        .roundRect(-17, 16, 34, 5, 1.5)
+        .fill({ color: 0x19262d, alpha: 0.96 })
+        .rect(-16, 17, 32 * healthFraction, 3)
+        .fill({ color: healthFraction > 0.5 ? 0x7bd996 : healthFraction > 0.25 ? 0xf6cd69 : 0xf18c79 });
+      const attackIndicator = new Graphics()
+        .circle(16, -13, 4.2)
+        .fill({ color: unit.attacksRemaining > 0 ? 0xf6d88e : 0x6a8190 })
+        .stroke({ color: 0x172932, width: 1 });
+      container.addChild(symbol, label, hpBar, attackIndicator);
       this.unitLayer.addChild(container);
       this.unitMarkers.push(container);
     }
