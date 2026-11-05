@@ -43,7 +43,7 @@ export function enemyMovementZoc(targetHexId: string, mover: UnitState, units: r
 /**
  * Dijkstra computes weighted paths and all legal endpoints for this unit.
  * Friendly units may be traversed, but never selected as destinations.
- * Enemy-occupied Hexes are impassable until a later combat system is added.
+ * Enemy-occupied Hexes are impassable until combat destroys their unit.
  * One enemy ZOC penalty (+2 MP) applies per entered Hex; no stacking/forced stop.
  */
 export function reachableMoves(view: MovementView, mover: UnitState): ReadonlyMap<string, MoveRoute> {

@@ -27,6 +27,7 @@ export interface UnitRenderState {
   readonly maxHp: number;
   readonly mpRemaining: number;
   readonly maxMp: number;
+  readonly attacksRemaining: number;
 }
 
 export interface RenderSnapshot {

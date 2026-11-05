@@ -22,7 +22,14 @@ export function MapCanvas() {
     const onHexClick = (hexId: string): void => {
       if (abort.signal.aborted || !renderer || !gameWorld) return;
       const standingUnit = gameWorld.unitAt(hexId);
-      if (standingUnit) {
+      const selected = selectedUnitId ? gameWorld.unitById(selectedUnitId) : undefined;
+      if (standingUnit && selected && standingUnit.countryId !== selected.countryId &&
+        gameWorld.attackableFor(selected.id).has(hexId)) {
+        // A selected unit attacks an in-range enemy instead of selecting it.
+        gameWorld.attackUnit(selected.id, hexId);
+        if (!gameWorld.unitById(selected.id)) selectedUnitId = null;
+        renderer.submitSnapshot(buildRenderSnapshot(gameWorld));
+      } else if (standingUnit) {
         selectedUnitId = standingUnit.id;
       } else if (selectedUnitId && gameWorld.reachableFor(selectedUnitId).has(hexId)) {
         gameWorld.moveUnit(selectedUnitId, hexId);
@@ -33,6 +40,7 @@ export function MapCanvas() {
       renderer.setSelection(
         selectedUnitId,
         selectedUnitId ? [...gameWorld.reachableFor(selectedUnitId).keys()] : [],
+        selectedUnitId ? [...gameWorld.attackableFor(selectedUnitId).keys()] : [],
       );
     };
 
