@@ -1,55 +1,147 @@
 {
- "id": "asteria-1936",
- "name": "阿斯特里亚 · 1936",
- "version": 1,
- "mapId": "asteria",
- "countries": [
-  {
-   "id": "aurelia",
-   "name": "奥瑞利亚王国",
-   "color": 13008487
+  "id": "asteria-1936",
+  "name": "阿斯特里亚 · 1936",
+  "version": 1,
+  "mapId": "asteria",
+  "countries": [
+    {
+      "id": "aurelia",
+      "name": "奥瑞利亚王国",
+      "color": 13008487
+    },
+    {
+      "id": "nordland",
+      "name": "北境联盟",
+      "color": 9222606
+    },
+    {
+      "id": "vesperia",
+      "name": "维斯佩里亚领邦",
+      "color": 11837906
+    },
+    {
+      "id": "meridia",
+      "name": "梅里迪亚同盟",
+      "color": 7976602
+    },
+    {
+      "id": "solmere",
+      "name": "索尔梅尔共和国",
+      "color": 14661999
+    }
+  ],
+  "provinceSovereignty": {
+    "raven": "aurelia",
+    "arden": "aurelia",
+    "westford": "aurelia",
+    "ironwick": "aurelia",
+    "northwatch": "nordland",
+    "frosthold": "nordland",
+    "snowreach": "nordland",
+    "stormhold": "nordland",
+    "eastmarch": "vesperia",
+    "silvercrest": "vesperia",
+    "southport": "vesperia",
+    "oldhaven": "vesperia",
+    "stonebridge": "meridia",
+    "goldhaven": "meridia",
+    "redwater": "meridia",
+    "greenfield": "meridia",
+    "riverbend": "solmere",
+    "sunreach": "solmere",
+    "clearwater": "solmere",
+    "southcliff": "solmere"
   },
-  {
-   "id": "nordland",
-   "name": "北境联盟",
-   "color": 9222606
-  },
-  {
-   "id": "vesperia",
-   "name": "维斯佩里亚领邦",
-   "color": 11837906
-  },
-  {
-   "id": "meridia",
-   "name": "梅里迪亚同盟",
-   "color": 7976602
-  },
-  {
-   "id": "solmere",
-   "name": "索尔梅尔共和国",
-   "color": 14661999
-  }
- ],
- "provinceSovereignty": {
-  "raven": "aurelia",
-  "arden": "aurelia",
-  "westford": "aurelia",
-  "ironwick": "aurelia",
-  "northwatch": "nordland",
-  "frosthold": "nordland",
-  "snowreach": "nordland",
-  "stormhold": "nordland",
-  "eastmarch": "vesperia",
-  "silvercrest": "vesperia",
-  "southport": "vesperia",
-  "oldhaven": "vesperia",
-  "stonebridge": "meridia",
-  "goldhaven": "meridia",
-  "redwater": "meridia",
-  "greenfield": "meridia",
-  "riverbend": "solmere",
-  "sunreach": "solmere",
-  "clearwater": "solmere",
-  "southcliff": "solmere"
- }
+  "initialUnits": [
+    {
+      "id": "aurelia-infantry-1",
+      "countryId": "aurelia",
+      "kind": "infantry",
+      "hexId": "6,5"
+    },
+    {
+      "id": "aurelia-tank-1",
+      "countryId": "aurelia",
+      "kind": "tank",
+      "hexId": "4,10"
+    },
+    {
+      "id": "aurelia-artillery-1",
+      "countryId": "aurelia",
+      "kind": "artillery",
+      "hexId": "-1,12"
+    },
+    {
+      "id": "nordland-infantry-1",
+      "countryId": "nordland",
+      "kind": "infantry",
+      "hexId": "7,5"
+    },
+    {
+      "id": "nordland-tank-1",
+      "countryId": "nordland",
+      "kind": "tank",
+      "hexId": "10,8"
+    },
+    {
+      "id": "nordland-antiTank-1",
+      "countryId": "nordland",
+      "kind": "antiTank",
+      "hexId": "19,4"
+    },
+    {
+      "id": "vesperia-infantry-1",
+      "countryId": "vesperia",
+      "kind": "infantry",
+      "hexId": "20,3"
+    },
+    {
+      "id": "vesperia-tank-1",
+      "countryId": "vesperia",
+      "kind": "tank",
+      "hexId": "15,12"
+    },
+    {
+      "id": "vesperia-artillery-1",
+      "countryId": "vesperia",
+      "kind": "artillery",
+      "hexId": "16,8"
+    },
+    {
+      "id": "meridia-infantry-1",
+      "countryId": "meridia",
+      "kind": "infantry",
+      "hexId": "14,8"
+    },
+    {
+      "id": "meridia-tank-1",
+      "countryId": "meridia",
+      "kind": "tank",
+      "hexId": "9,10"
+    },
+    {
+      "id": "meridia-antiTank-1",
+      "countryId": "meridia",
+      "kind": "antiTank",
+      "hexId": "15,13"
+    },
+    {
+      "id": "solmere-infantry-1",
+      "countryId": "solmere",
+      "kind": "infantry",
+      "hexId": "8,7"
+    },
+    {
+      "id": "solmere-tank-1",
+      "countryId": "solmere",
+      "kind": "tank",
+      "hexId": "6,9"
+    },
+    {
+      "id": "solmere-antiTank-1",
+      "countryId": "solmere",
+      "kind": "antiTank",
+      "hexId": "6,13"
+    }
+  ]
 }

@@ -2,7 +2,7 @@ import { Application, Assets, Container, Graphics, Sprite, Text, type Texture } 
 import type { RenderSnapshot } from '../contracts/RenderSnapshot.ts';
 import type { MapData } from '../map/MapData.ts';
 import type { CityDefinition } from '../map/MapDefinition.ts';
-import { DIRECTIONS, hexCenter, hexCorners, hexId, type Point } from '../map/hex.ts';
+import { DIRECTIONS, hexCenter, hexCorners, hexId, pixelToHex, type Point } from '../map/hex.ts';
 import cityIconUrl from '../assets/city.svg?url';
 import capitalIconUrl from '../assets/capital.svg?url';
 import cityMarkerUrl from '../assets/city-marker.svg?url';
@@ -63,9 +63,13 @@ export class MapRenderer {
   private readonly terrain = new Container();
   private readonly countryLabels = new Container();
   private readonly cityLayer = new Container();
+  private readonly unitLayer = new Container();
+  private readonly selectionLayer = new Graphics();
 
   private readonly tiles = new Map<string, Graphics>();
   private readonly cityMarkers: CityMarker[] = [];
+  private readonly unitMarkers: Container[] = [];
+  private snapshotUnits: RenderSnapshot['units'] = [];
   private readonly provinceBorders = new Graphics();
   private readonly frontLines = new Graphics();
   private readonly coastlines = new Graphics();
@@ -77,13 +81,16 @@ export class MapRenderer {
   private fitScale = 1;
   private cameraX = 0;
   private cameraY = 0;
+  private selectedUnitId: string | null = null;
+  private reachableHexIds: readonly string[] = [];
   private drag: {
-    id: number; pointerX: number; pointerY: number; cameraX: number; cameraY: number;
+    id: number; pointerX: number; pointerY: number; cameraX: number; cameraY: number; moved: boolean;
   } | null = null;
 
   constructor(
     private readonly host: HTMLDivElement,
     private readonly map: MapData,
+    private readonly onHexClick?: (hexId: string) => void,
   ) {}
 
   async initialize(): Promise<void> {
@@ -103,7 +110,7 @@ export class MapRenderer {
     this.initialized = true;
     this.host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.world);
-    this.world.addChild(this.terrain, this.countryLabels, this.cityLayer);
+    this.world.addChild(this.terrain, this.countryLabels, this.selectionLayer, this.cityLayer, this.unitLayer);
 
     this.createTiles();
     this.createStaticBorders();
@@ -229,6 +236,7 @@ export class MapRenderer {
       if (!cityStates.has(city.id)) throw new Error(`城市状态缺失：${city.id}`);
     }
     this.rebuildCountryLabels(snapshot, countryById, controllerByHex);
+    this.rebuildUnits(snapshot);
     this.lastRevision = snapshot.revision;
   }
 
@@ -265,9 +273,70 @@ export class MapRenderer {
     }
   }
 
+
+  /** Renderer owns interaction visuals; Gameplay owns route calculations. */
+  setSelection(selectedUnitId: string | null, reachableHexIds: readonly string[]): void {
+    this.selectedUnitId = selectedUnitId;
+    this.reachableHexIds = [...reachableHexIds];
+    this.redrawSelection();
+  }
+
+  private redrawSelection(): void {
+    this.selectionLayer.clear();
+    if (!this.initialized || this.destroyed) return;
+    for (const id of this.reachableHexIds) {
+      const hex = this.map.hexesById.get(id);
+      if (!hex) continue;
+      this.selectionLayer
+        .poly(hexCorners(hex, this.map.definition.grid))
+        .fill({ color: 0xabe2a6, alpha: 0.22 })
+        .stroke({ color: 0xa4d69a, alpha: 0.8, width: 2 });
+    }
+    const unit = this.snapshotUnits.find(item => item.id === this.selectedUnitId);
+    const hex = unit && this.map.hexesById.get(unit.hexId);
+    if (hex) {
+      this.selectionLayer
+        .poly(hexCorners(hex, this.map.definition.grid))
+        .stroke({ color: 0xfff2b6, width: 3.5 });
+    }
+  }
+
+  private rebuildUnits(snapshot: RenderSnapshot): void {
+    for (const node of this.unitMarkers) node.destroy();
+    this.unitMarkers.length = 0;
+    const colors = new Map(snapshot.countries.map(country => [country.id, country.color]));
+    const glyphs: Record<RenderSnapshot['units'][number]['kind'], string> = {
+      infantry: '步', tank: '坦', antiTank: '反', artillery: '炮',
+    };
+
+    for (const unit of snapshot.units) {
+      const hex = this.map.hexesById.get(unit.hexId);
+      if (!hex) continue;
+      const container = new Container();
+      const position = hexCenter(hex, this.map.definition.grid);
+      container.position.set(position.x, position.y);
+      const symbol = new Graphics()
+        .roundRect(-17, -13, 34, 26, 5)
+        .fill({ color: 0x182f3b, alpha: 0.96 })
+        .stroke({ color: colors.get(unit.countryId) ?? 0xffffff, width: 3 });
+      const label = new Text({
+        text: glyphs[unit.kind],
+        style: { fontFamily: FONT, fontSize: 15, fontWeight: 'bold', fill: 0xffffff },
+      });
+      label.anchor.set(0.5);
+      container.addChild(symbol, label);
+      this.unitLayer.addChild(container);
+      this.unitMarkers.push(container);
+    }
+    this.snapshotUnits = snapshot.units;
+    this.redrawSelection();
+    this.updateCamera();
+  }
+
   private updateCamera(): void {
     this.world.position.set(this.cameraX, this.cameraY);
     this.world.scale.set(this.scale);
+    for (const marker of this.unitMarkers) marker.scale.set(1 / this.scale);
     const detailed = this.scale >= this.fitScale * 0.8;
     for (const marker of this.cityMarkers) {
       marker.node.scale.set(1 / this.scale);
@@ -293,24 +362,37 @@ export class MapRenderer {
     if (event.button !== 0) return;
     this.drag = {
       id: event.pointerId, pointerX: event.clientX, pointerY: event.clientY,
-      cameraX: this.cameraX, cameraY: this.cameraY,
+      cameraX: this.cameraX, cameraY: this.cameraY, moved: false,
     };
     this.host.setPointerCapture(event.pointerId);
   };
 
   private readonly pointerMove = (event: PointerEvent): void => {
     if (!this.drag || event.pointerId !== this.drag.id) return;
-    this.cameraX = this.drag.cameraX + event.clientX - this.drag.pointerX;
-    this.cameraY = this.drag.cameraY + event.clientY - this.drag.pointerY;
+    const deltaX = event.clientX - this.drag.pointerX;
+    const deltaY = event.clientY - this.drag.pointerY;
+    if (Math.hypot(deltaX, deltaY) > 5) this.drag.moved = true;
+    if (!this.drag.moved) return;
+    this.cameraX = this.drag.cameraX + deltaX;
+    this.cameraY = this.drag.cameraY + deltaY;
     this.updateCamera();
   };
 
   private readonly pointerUp = (event: PointerEvent): void => {
     if (!this.drag || event.pointerId !== this.drag.id) return;
+    const drag = this.drag;
     this.drag = null;
     if (this.host.hasPointerCapture(event.pointerId)) {
       this.host.releasePointerCapture(event.pointerId);
     }
+    if (event.type !== 'pointerup' || drag.moved || !this.onHexClick) return;
+    const rect = this.host.getBoundingClientRect();
+    const hex = pixelToHex({
+      x: (event.clientX - rect.left - this.cameraX) / this.scale,
+      y: (event.clientY - rect.top - this.cameraY) / this.scale,
+    }, this.map.definition.grid);
+    const id = hexId(hex);
+    if (this.map.hexesById.has(id)) this.onHexClick(id);
   };
 
   private readonly wheel = (event: WheelEvent): void => {

@@ -16,6 +16,25 @@ export function MapCanvas() {
 
     const abort = new AbortController();
     let renderer: MapRenderer | undefined;
+    let gameWorld: GameWorld | undefined;
+    let selectedUnitId: string | null = null;
+
+    const onHexClick = (hexId: string): void => {
+      if (abort.signal.aborted || !renderer || !gameWorld) return;
+      const standingUnit = gameWorld.unitAt(hexId);
+      if (standingUnit) {
+        selectedUnitId = standingUnit.id;
+      } else if (selectedUnitId && gameWorld.reachableFor(selectedUnitId).has(hexId)) {
+        gameWorld.moveUnit(selectedUnitId, hexId);
+        renderer.submitSnapshot(buildRenderSnapshot(gameWorld));
+      } else {
+        selectedUnitId = null;
+      }
+      renderer.setSelection(
+        selectedUnitId,
+        selectedUnitId ? [...gameWorld.reachableFor(selectedUnitId).keys()] : [],
+      );
+    };
 
     async function start() {
       // Future independent maps are selected by choosing a scenario asset.
@@ -24,8 +43,8 @@ export function MapCanvas() {
       const map = await loadMap(scenario.mapId, abort.signal);
       if (abort.signal.aborted) return;
 
-      const gameWorld = new GameWorld(map, scenario);
-      const instance = new MapRenderer(host!, map);
+      gameWorld = new GameWorld(map, scenario);
+      const instance = new MapRenderer(host!, map, onHexClick);
       renderer = instance;
       await instance.initialize();
       if (abort.signal.aborted) return;

@@ -1,4 +1,5 @@
 import type { MapData } from '../map/MapData.ts';
+import { UNIT_KINDS, type InitialUnitDefinition } from './Units.ts';
 
 export interface CountryDefinition {
   id: string;
@@ -16,6 +17,8 @@ export interface ScenarioDefinition {
   provinceSovereignty: Readonly<Record<string, string>>;
   /** Optional initially occupied hexes; leaves static province boundaries untouched. */
   initialHexControl?: Readonly<Record<string, string>>;
+  /** Initial ground units are scenario data, not map geometry. */
+  initialUnits?: readonly InitialUnitDefinition[];
 }
 
 export function validateScenario(scenario: ScenarioDefinition, map: MapData): void {
@@ -48,5 +51,28 @@ export function validateScenario(scenario: ScenarioDefinition, map: MapData): vo
       !countries.has(countryId)) {
       throw new Error(`无效的初始 Hex 控制权：${id}`);
     }
+  }
+  if (scenario.initialUnits !== undefined && !Array.isArray(scenario.initialUnits)) {
+    throw new Error('剧本 initialUnits 必须是数组');
+  }
+  const unitIds = new Set<string>();
+  const usedHexes = new Set<string>();
+  for (const unit of scenario.initialUnits ?? []) {
+    if (!unit || typeof unit.id !== 'string' || !unit.id ||
+      unitIds.has(unit.id) || !countries.has(unit.countryId) ||
+      !UNIT_KINDS.includes(unit.kind)) {
+      throw new Error('剧本包含非法或重复的地面单位');
+    }
+    const hex = map.hexesById.get(unit.hexId);
+    if (!hex || hex.terrain === 'ocean' || usedHexes.has(unit.hexId)) {
+      throw new Error(`单位 ${unit.id} 所在 Hex 非法或已被占据`);
+    }
+    const owner = scenario.initialHexControl?.[unit.hexId] ??
+      scenario.provinceSovereignty[hex.provinceId!];
+    if (owner !== unit.countryId) {
+      throw new Error(`单位 ${unit.id} 初始位置不属于其国家`);
+    }
+    unitIds.add(unit.id);
+    usedHexes.add(unit.hexId);
   }
 }
