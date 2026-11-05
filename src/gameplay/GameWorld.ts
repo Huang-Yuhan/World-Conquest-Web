@@ -11,6 +11,8 @@ export class GameWorld {
   private readonly hexControl = new Map<string, string | null>();
   private readonly unitStates = new Map<string, UnitState>();
   private _revision = 0;
+  private _round = 1;
+  private _activeCountryIndex = 0;
 
   constructor(map: MapData, scenario: ScenarioDefinition) {
     validateScenario(scenario, map);
@@ -31,6 +33,41 @@ export class GameWorld {
 
   get revision(): number {
     return this._revision;
+  }
+
+  /** Round 1 begins with the first country in the scenario. */
+  get round(): number {
+    return this._round;
+  }
+
+  /** Active country is authoritative Gameplay state, never a Renderer decision. */
+  get activeCountryId(): string {
+    return this.scenario.countries[this._activeCountryIndex].id;
+  }
+
+  get turnPosition(): number {
+    return this._activeCountryIndex + 1;
+  }
+
+  /** Pass to the next country in scenario order. Reset ONLY its living units. */
+  endTurn(): void {
+    this._activeCountryIndex++;
+    if (this._activeCountryIndex >= this.scenario.countries.length) {
+      this._activeCountryIndex = 0;
+      this._round++;
+    }
+    for (const [id, unit] of this.unitStates) {
+      if (unit.countryId !== this.activeCountryId) continue;
+      this.unitStates.set(id, { ...unit, mpRemaining: unit.maxMp, attacksRemaining: 1 });
+    }
+    // Turn transitions are observable even if the incoming country has no units.
+    this._revision++;
+  }
+
+  private assertActive(unit: UnitState): void {
+    if (unit.countryId !== this.activeCountryId) {
+      throw new Error(`目前轮到 ${this.activeCountryId}，不能操作其他国家的部队`);
+    }
   }
 
   controllerOf(hexId: string): string | null {
@@ -57,6 +94,7 @@ export class GameWorld {
   reachableFor(unitId: string): ReadonlyMap<string, MoveRoute> {
     const mover = this.unitStates.get(unitId);
     if (!mover) throw new Error(`未知单位：${unitId}`);
+    if (mover.countryId !== this.activeCountryId) return new Map();
     return reachableMoves({ map: this.map, units: this.units }, mover);
   }
 
@@ -64,6 +102,7 @@ export class GameWorld {
   moveUnit(unitId: string, destinationId: string): MoveRoute {
     const unit = this.unitStates.get(unitId);
     if (!unit) throw new Error(`未知单位：${unitId}`);
+    this.assertActive(unit);
     const route = this.reachableFor(unitId).get(destinationId);
     if (!route) throw new Error(`单位 ${unitId} 无法移动到 ${destinationId}`);
     // Paths are validated before any mutation, so an invalid move never
@@ -87,6 +126,7 @@ export class GameWorld {
     const attacker = this.unitStates.get(unitId);
     if (!attacker) throw new Error(`未知单位：${unitId}`);
     const targets = new Map<string, CombatResult>();
+    if (attacker.countryId !== this.activeCountryId) return targets;
     if (attacker.attacksRemaining <= 0) return targets;
     for (const defender of this.unitStates.values()) {
       if (defender.countryId !== attacker.countryId && isInAttackRange(attacker, defender)) {
@@ -104,6 +144,7 @@ export class GameWorld {
   attackUnit(attackerId: string, defenderHexId: string): CombatResult {
     const attacker = this.unitStates.get(attackerId);
     if (!attacker) throw new Error(`未知攻击单位：${attackerId}`);
+    this.assertActive(attacker);
     const defender = [...this.unitStates.values()].find(u => u.hexId === defenderHexId);
     if (!defender) throw new Error('目标 Hex 没有可攻击的单位');
     const result = previewCombat(this.map, attacker, defender);

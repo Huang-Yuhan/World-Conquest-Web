@@ -6,6 +6,12 @@ export function buildRenderSnapshot(world: GameWorld): RenderSnapshot {
   const snapshot: RenderSnapshot = {
     mapId: world.map.definition.id,
     revision: world.revision,
+    turn: Object.freeze({
+      round: world.round,
+      activeCountryId: world.activeCountryId,
+      countryIndex: world.turnPosition,
+      countryCount: world.scenario.countries.length,
+    }),
     countries: Object.freeze(world.scenario.countries.map(country => Object.freeze({
       id: country.id, name: country.name, color: country.color,
     }))),

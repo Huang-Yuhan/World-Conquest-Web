@@ -11,7 +11,15 @@ body {
   background: #173742;
 }
 
+.map-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 .map-canvas {
+  position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -54,4 +62,49 @@ body {
   border: 0;
   border-radius: 5px;
   padding: 9px 16px;
+}
+
+/* Compact turn control; keep the rest of the map unobstructed. */
+.turn-hud {
+  position: absolute;
+  z-index: 5;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  color: #fff4df;
+  background: rgba(20, 43, 54, 0.94);
+  border: 1px solid rgba(255, 235, 203, 0.22);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px #0004;
+  font: 13px/1.5 system-ui, "Microsoft YaHei", sans-serif;
+  cursor: default;
+}
+.turn-hud__status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+.turn-hud__round { color: #b2c5ca; font-size: 11px; }
+.turn-hud__country { display: inline-flex; gap: 7px; align-items: center; white-space: nowrap; font-weight: 600; }
+.turn-hud__swatch { width: 10px; height: 10px; border-radius: 3px; border: 1px solid #ffffff55; }
+.turn-hud__next {
+  padding: 9px 13px;
+  border: 1px solid #dec78c;
+  border-radius: 6px;
+  background: #e5cb91;
+  color: #193341;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.turn-hud__next:hover { background: #f3dda9; }
+.turn-hud__next:focus-visible { outline: 2px solid white; outline-offset: 3px; }
+@media (max-width: 440px) {
+  .turn-hud { right: 8px; bottom: 8px; gap: 8px; padding: 8px; }
+  .turn-hud__status { min-width: 0; }
+  .turn-hud__next { padding: 7px 9px; }
 }

@@ -109,6 +109,29 @@ try {
   assert.deepEqual(errors, [], 'Browser combat interaction caused an error');
   console.log('Ground combat click changed HP bars and exhausted the attack indicator');
 
+  // Validate real HTML button clicks without repeated WebGL screenshots.
+  // Unit tests cover inactive-country command guards and MP/AP restoration.
+  const endTurn = page.getByRole('button', { name: '结束回合' });
+  assert.equal(await endTurn.count(), 1);
+  const status = page.locator('.turn-hud__status');
+  assert.match(await status.innerText(), /第 1 轮/);
+  assert.match(await status.innerText(), /奥瑞利亚王国/);
+  const nextCountries = ['北境联盟', '维斯佩里亚领邦', '梅里迪亚同盟', '索尔梅尔共和国', '奥瑞利亚王国'];
+  for (const [index, country] of nextCountries.entries()) {
+    console.log('Click end turn ->', country);
+    await endTurn.click({ timeout: 5000 });
+    await page.waitForFunction(
+      name => document.querySelector('.turn-hud__status')?.textContent?.includes(name),
+      country,
+      { timeout: 5000 },
+    );
+    const text = await status.innerText();
+    assert.match(text, new RegExp(country));
+    if (index === 4) assert.match(text, /第 2 轮/);
+  }
+  assert.deepEqual(errors, [], 'Hot-seat turn switching caused a browser error');
+  console.log('Hot-seat 5-country turn cycle and round rollover passed');
+
   const failing = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await failing.goto(host + '?scenario=does-not-exist', { waitUntil: 'domcontentloaded' });
   await failing.getByRole('alert').waitFor({ timeout: 12000 });

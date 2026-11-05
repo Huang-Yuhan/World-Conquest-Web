@@ -385,7 +385,9 @@ export class MapRenderer {
   };
 
   private readonly pointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) return;
+    // UI controls share the host container. Only canvas drags should capture
+    // the pointer, otherwise HTML buttons lose their click events.
+    if (event.button !== 0 || event.target !== this.app.canvas) return;
     this.drag = {
       id: event.pointerId, pointerX: event.clientX, pointerY: event.clientY,
       cameraX: this.cameraX, cameraY: this.cameraY, moved: false,
@@ -422,6 +424,7 @@ export class MapRenderer {
   };
 
   private readonly wheel = (event: WheelEvent): void => {
+    if (event.target !== this.app.canvas) return;
     event.preventDefault();
     const rect = this.host.getBoundingClientRect();
     const x = event.clientX - rect.left;
