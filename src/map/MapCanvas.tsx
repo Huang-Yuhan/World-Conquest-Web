@@ -25,10 +25,10 @@ useEffect(()=>{
    for(const p of PROVINCES){const g=new Graphics();g.eventMode='static';g.cursor='pointer';g.on('pointertap',()=>{if(performance.now()-lastDragged>120)selectCallback.current(p.id);});g.on('pointerover',()=>{g.tint=0xf2e6d3;});g.on('pointerout',()=>{g.tint=0xffffff;});scene.addChild(g);shapes.current.set(p.id,g);paint(p,g);}
    for(const p of PROVINCES){const pos=center(p);
      if(p.capital){const icon=new Graphics().circle(pos.x,pos.y-9,7).fill(0xffd793).circle(pos.x,pos.y-9,3).fill(0x152631);icon.eventMode='none';scene.addChild(icon);}
-     const name=new Text({text:p.name,anchor:.5,style:{fontFamily:'Georgia,serif',fontSize:p.capital?13:10,fill:0x263843,fontWeight:p.capital?'bold':'normal'}});name.position.set(pos.x,pos.y+11);name.eventMode='none';scene.addChild(name);
-     const army=new Text({text:'',anchor:.5,style:{fontFamily:'Arial',fontSize:13,fontWeight:'bold',fill:0xffefd1}});army.position.set(pos.x,pos.y-24);army.eventMode='none';scene.addChild(army);armyLabels.current.set(p.id,army);
+     const name=new Text({text:p.name,anchor:.5,style:{fontFamily:'Noto Sans CJK SC, Microsoft YaHei, PingFang SC, sans-serif',fontSize:p.capital?13:10,fill:0x263843,fontWeight:p.capital?'bold':'normal'}});name.position.set(pos.x,pos.y+11);name.eventMode='none';scene.addChild(name);
+     const army=new Text({text:'',anchor:.5,style:{fontFamily:'Noto Sans CJK SC, Microsoft YaHei, PingFang SC, sans-serif',fontSize:13,fontWeight:'bold',fill:0xffefd1}});army.position.set(pos.x,pos.y-24);army.eventMode='none';scene.addChild(army);armyLabels.current.set(p.id,army);
    }
-   for(const c of COUNTRIES){const own=PROVINCES.filter(p=>p.ownerId===c.id);const x=own.reduce((v,p)=>v+center(p).x,0)/own.length,y=own.reduce((v,p)=>v+center(p).y,0)/own.length;const txt=new Text({text:c.name.toUpperCase(),anchor:.5,style:{fontFamily:'Georgia,serif',fontSize:22,fill:0x152630,fontWeight:'bold',letterSpacing:3}});txt.alpha=.48;txt.position.set(x,y-40);txt.eventMode='none';scene.addChild(txt);}
+   for(const c of COUNTRIES){const own=PROVINCES.filter(p=>p.ownerId===c.id);const x=own.reduce((v,p)=>v+center(p).x,0)/own.length,y=own.reduce((v,p)=>v+center(p).y,0)/own.length;const txt=new Text({text:c.name,anchor:.5,style:{fontFamily:'Georgia,serif',fontSize:20,fill:0x152630,fontWeight:'bold',letterSpacing:1}});txt.alpha=.48;txt.position.set(x,y-40);txt.eventMode='none';scene.addChild(txt);}
    for(const [id,label] of armyLabels.current)label.text=(regiments[id]??0)>0?'⚑ '+regiments[id]:'';
    fit();host.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);host.addEventListener('wheel',wheel,{passive:false});window.addEventListener('resize',resize);
  }
