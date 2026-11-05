@@ -109,40 +109,28 @@ try {
   assert.deepEqual(errors, [], 'Browser combat interaction caused an error');
   console.log('Ground combat click changed HP bars and exhausted the attack indicator');
 
-  // Full hot-seat turn cycle: verify country order and round rollover.
+  // Validate real HTML button clicks without repeated WebGL screenshots.
+  // Unit tests cover inactive-country command guards and MP/AP restoration.
   const endTurn = page.getByRole('button', { name: '结束回合' });
   assert.equal(await endTurn.count(), 1);
   const status = page.locator('.turn-hud__status');
   assert.match(await status.innerText(), /第 1 轮/);
   assert.match(await status.innerText(), /奥瑞利亚王国/);
-  await endTurn.click();
-  await page.waitForFunction(
-    () => document.querySelector('.turn-hud__status')?.textContent?.includes('北境联盟'),
-    undefined, { timeout: 10000 },
-  );
-  assert.match(await status.innerText(), /北境联盟/);
-  assert.match(await status.innerText(), /2\/5/);
-
-  // Non-active units may be inspected visually, but cannot be selected or commanded.
-  const screenAfterTurn = await page.screenshot({ animations: 'disabled' });
-  await page.mouse.click(screen(6, 5).x, screen(6, 5).y); // inactive Aurelia unit
-  await page.waitForTimeout(150);
-  assert.deepEqual(await page.screenshot({ animations: 'disabled' }), screenAfterTurn,
-    'Inactive country unit must not create a selection highlight');
-
-  await page.mouse.click(screen(7, 5).x, screen(7, 5).y); // active Nordland unit
-  await page.waitForTimeout(150);
-  assert.notDeepEqual(await page.screenshot({ animations: 'disabled' }), screenAfterTurn,
-    'Active country unit should still be selectable');
-  for (let turn = 0; turn < 4; turn++) await endTurn.click();
-  await page.waitForFunction(
-    () => document.querySelector('.turn-hud__status')?.textContent?.includes('第 2 轮'),
-    { timeout: 10000 },
-  );
-  assert.match(await status.innerText(), /第 2 轮/);
-  assert.match(await status.innerText(), /奥瑞利亚王国/);
+  const nextCountries = ['北境联盟', '维斯佩里亚领邦', '梅里迪亚同盟', '索尔梅尔共和国', '奥瑞利亚王国'];
+  for (const [index, country] of nextCountries.entries()) {
+    console.log('Click end turn ->', country);
+    await endTurn.click({ timeout: 5000 });
+    await page.waitForFunction(
+      name => document.querySelector('.turn-hud__status')?.textContent?.includes(name),
+      country,
+      { timeout: 5000 },
+    );
+    const text = await status.innerText();
+    assert.match(text, new RegExp(country));
+    if (index === 4) assert.match(text, /第 2 轮/);
+  }
   assert.deepEqual(errors, [], 'Hot-seat turn switching caused a browser error');
-  console.log('Hot-seat 5-country turn cycle, active selection and round rollover passed');
+  console.log('Hot-seat 5-country turn cycle and round rollover passed');
 
   const failing = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await failing.goto(host + '?scenario=does-not-exist', { waitUntil: 'domcontentloaded' });
