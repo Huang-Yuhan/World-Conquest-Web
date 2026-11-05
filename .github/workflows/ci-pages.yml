@@ -25,13 +25,11 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: '22'
-          package-manager-cache: false
-      # No lockfile in the first prototype; use npm install until one is committed.
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: TypeScript typecheck
         run: npm run typecheck
-      - name: Simulation tests
+      - name: Map data tests
         run: npm test
       - name: Build Vite production assets
         run: npm run build
