@@ -65,6 +65,13 @@ try {
   console.log('Screenshot approximate distinct RGB colors:', colors);
   assert.ok(colors > 8, 'Canvas looks blank: screenshot has too few color variations');
   assert.deepEqual(errors, [], 'Browser had runtime or asset errors');
+
+  const failing = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  await failing.goto(host + '?scenario=does-not-exist', { waitUntil: 'domcontentloaded' });
+  await failing.getByRole('alert').waitFor({ timeout: 12000 });
+  assert.match(await failing.getByRole('alert').innerText(), /地图加载失败/);
+  console.log('Missing scenario displays a visible error instead of a blank screen');
+  await failing.close();
 } finally {
   await browser?.close();
   server.kill('SIGTERM');
