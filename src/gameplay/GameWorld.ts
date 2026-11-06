@@ -3,6 +3,7 @@ import { validateScenario, type ScenarioDefinition } from './ScenarioDefinition.
 import { reachableMoves, type MoveRoute } from './Movement.ts';
 import { UNIT_RULES, type UnitState } from './Units.ts';
 import { isInAttackRange, previewCombat, type CombatResult } from './Combat.ts';
+import { resolveCityCaptures, type CitySettlementResult } from './CityOccupation.ts';
 
 /** Authoritative mutable state. No rendering imports or PixiJS types. */
 export class GameWorld {
@@ -10,6 +11,8 @@ export class GameWorld {
   readonly scenario: ScenarioDefinition;
   private readonly hexControl = new Map<string, string | null>();
   private readonly unitStates = new Map<string, UnitState>();
+  private readonly pendingCityCaptures = new Map<string, string>();
+  private readonly cityByHexId = new Map<string, string>();
   private _revision = 0;
   private _round = 1;
   private _activeCountryIndex = 0;
@@ -18,6 +21,7 @@ export class GameWorld {
     validateScenario(scenario, map);
     this.map = map;
     this.scenario = scenario;
+    for (const city of map.cities) this.cityByHexId.set(city.hexId, city.id);
 
     for (const hex of map.hexes) {
       const controllerId = hex.provinceId
@@ -49,8 +53,24 @@ export class GameWorld {
     return this._activeCountryIndex + 1;
   }
 
-  /** Pass to the next country in scenario order. Reset ONLY its living units. */
-  endTurn(): void {
+  /**
+   * Resolve one-shot city-capture events BEFORE rotating to the next country.
+   * Administration uses a single pre-settlement snapshot, never chains.
+   */
+  endTurn(): CitySettlementResult {
+    const settlement = resolveCityCaptures(
+      this.map,
+      hexId => this.controllerOf(hexId),
+      this.units,
+      [...this.pendingCityCaptures].map(([cityId, controllerId]) => ({ cityId, controllerId })),
+    );
+    for (const claim of settlement.claims) {
+      // Deliberately bypass setHexController: administrative claims never
+      // become city capture events.
+      this.hexControl.set(claim.hexId, claim.controllerId);
+    }
+    this.pendingCityCaptures.clear();
+
     this._activeCountryIndex++;
     if (this._activeCountryIndex >= this.scenario.countries.length) {
       this._activeCountryIndex = 0;
@@ -62,12 +82,22 @@ export class GameWorld {
     }
     // Turn transitions are observable even if the incoming country has no units.
     this._revision++;
+    return settlement;
   }
 
   private assertActive(unit: UnitState): void {
     if (unit.countryId !== this.activeCountryId) {
       throw new Error(`目前轮到 ${this.activeCountryId}，不能操作其他国家的部队`);
     }
+  }
+
+  /** Centralized non-initial control transitions and city event registration. */
+  private setHexController(hexId: string, controllerId: string): boolean {
+    if (this.hexControl.get(hexId) === controllerId) return false;
+    this.hexControl.set(hexId, controllerId);
+    const cityId = this.cityByHexId.get(hexId);
+    if (cityId) this.pendingCityCaptures.set(cityId, controllerId);
+    return true;
   }
 
   controllerOf(hexId: string): string | null {
@@ -109,7 +139,7 @@ export class GameWorld {
     // consumes MP or partially changes territorial control.
     for (const hexId of route.hexIds.slice(1)) {
       if (this.hexControl.get(hexId) !== unit.countryId) {
-        this.hexControl.set(hexId, unit.countryId);
+        this.setHexController(hexId, unit.countryId);
       }
     }
     this.unitStates.set(unitId, {
@@ -177,7 +207,7 @@ export class GameWorld {
     let changed = false;
     for (const { hexId, controllerId } of changes) {
       if (this.hexControl.get(hexId) !== controllerId) {
-        this.hexControl.set(hexId, controllerId);
+        this.setHexController(hexId, controllerId);
         changed = true;
       }
     }

@@ -132,6 +132,42 @@ try {
   assert.deepEqual(errors, [], 'Hot-seat turn switching caused a browser error');
   console.log('Hot-seat 5-country turn cycle and round rollover passed');
 
+  // Use an intercepted scenario asset to make a city capture reachable
+  // in one movement. This is only a browser fixture; production data remains
+  // unchanged and no test-only gameplay command is exposed in the app.
+  const cityPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await cityPage.route('**/scenarios/asteria-1936.json', route => {
+    const fixture = JSON.parse(readFileSync(
+      new URL('../public/scenarios/asteria-1936.json', import.meta.url), 'utf8',
+    ));
+    fixture.initialUnits = [{
+      id: 'capture-demo', countryId: 'aurelia', kind: 'infantry', hexId: '3,5',
+    }];
+    fixture.initialHexControl = {
+      '2,5': 'nordland',
+      '3,4': 'nordland', '2,4': 'nordland',
+      '1,5': 'nordland', '1,6': 'nordland', '2,6': 'nordland',
+    };
+    return route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify(fixture),
+    });
+  });
+  await cityPage.goto(host, { waitUntil: 'networkidle', timeout: 30000 });
+  await cityPage.getByRole('button', { name: '结束回合' }).waitFor();
+  await cityPage.mouse.click(screen(3, 5).x, screen(3, 5).y);
+  await cityPage.mouse.click(screen(2, 5).x, screen(2, 5).y);
+  assert.equal(await cityPage.locator('.turn-hud__settlement').count(), 0,
+    'City capture must not trigger administration before turn settlement');
+  await cityPage.getByRole('button', { name: '结束回合' }).click();
+  await cityPage.locator('.turn-hud__settlement').waitFor({ timeout: 10000 });
+  assert.match(await cityPage.locator('.turn-hud__settlement').innerText(), /接管 5 Hex/,
+    'End turn must automatically claim the five eligible adjacent land Hexes');
+  await cityPage.getByRole('button', { name: '结束回合' }).click();
+  assert.equal(await cityPage.locator('.turn-hud__settlement').count(), 0,
+    'The city capture event must only settle once');
+  console.log('Captured city settled 5 surrounding Hexes once, at end of turn');
+  await cityPage.close();
+
   const failing = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await failing.goto(host + '?scenario=does-not-exist', { waitUntil: 'domcontentloaded' });
   await failing.getByRole('alert').waitFor({ timeout: 12000 });
