@@ -1,5 +1,6 @@
 import { Application, Assets, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import type { RenderSnapshot } from '../contracts/RenderSnapshot.ts';
+import type { ActionMapFeedback } from '../contracts/ActionMapFeedback.ts';
 import type { MapData } from '../map/MapData.ts';
 import type { CityDefinition } from '../map/MapDefinition.ts';
 import { DIRECTIONS, hexCenter, hexCorners, hexId, pixelToHex, type Point } from '../map/hex.ts';
@@ -65,6 +66,8 @@ export class MapRenderer {
   private readonly cityLayer = new Container();
   private readonly unitLayer = new Container();
   private readonly selectionLayer = new Graphics();
+  private readonly feedbackLayer = new Container();
+  private readonly feedbackTextNodes: Text[] = [];
 
   private readonly tiles = new Map<string, Graphics>();
   private readonly cityMarkers: CityMarker[] = [];
@@ -111,7 +114,7 @@ export class MapRenderer {
     this.initialized = true;
     this.host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.world);
-    this.world.addChild(this.terrain, this.countryLabels, this.selectionLayer, this.cityLayer, this.unitLayer);
+    this.world.addChild(this.terrain, this.countryLabels, this.feedbackLayer, this.selectionLayer, this.cityLayer, this.unitLayer);
 
     this.createTiles();
     this.createStaticBorders();
@@ -275,6 +278,73 @@ export class MapRenderer {
   }
 
 
+
+  /**
+   * Visualize only data prepared by the UI layer: no combat or occupation
+   * logic is allowed in PixiJS. Results persist until the next action.
+   */
+  setActionFeedback(feedback: ActionMapFeedback | null): void {
+    for (const child of this.feedbackLayer.removeChildren()) child.destroy();
+    this.feedbackTextNodes.length = 0;
+    if (this.destroyed || !this.initialized || !feedback) return;
+
+    if (feedback.kind === 'city-settlement') {
+      // A neighboring Hex can be evaluated by more than one city. Prefer
+      // showing a successful claim, then an actual military blocker.
+      const priority: Record<string, number> = {
+        claimed: 6, contested: 5, enemyGarrison: 4,
+        enemyZoc: 3, otherCity: 2, outsideProvince: 1,
+      };
+      const colors: Record<string, number> = {
+        claimed: 0x67d893,
+        enemyGarrison: 0xf27067,
+        enemyZoc: 0xeeae66,
+        contested: 0xe48fda,
+        outsideProvince: 0x91abc0,
+        otherCity: 0xc1aadd,
+      };
+      const byHex = new Map<string, string>();
+      for (const item of feedback.hexes) {
+        if (!this.map.hexesById.has(item.hexId)) continue;
+        const previous = byHex.get(item.hexId);
+        if (!previous || priority[item.status] > priority[previous]) {
+          byHex.set(item.hexId, item.status);
+        }
+      }
+      for (const [id, status] of byHex) {
+        const hex = this.map.hexesById.get(id)!;
+        const color = colors[status];
+        const overlay = new Graphics()
+          .poly(hexCorners(hex, this.map.definition.grid))
+          .fill({ color, alpha: status === 'claimed' ? 0.32 : 0.19 })
+          .stroke({ color, alpha: 0.97, width: 2.7 });
+        this.feedbackLayer.addChild(overlay);
+      }
+    } else {
+      const targets = [
+        { hexId: feedback.defenderHexId, damage: feedback.damageToDefender,
+          destroyed: feedback.defenderDestroyed, color: 0xffc2a0 },
+        { hexId: feedback.attackerHexId, damage: feedback.damageToAttacker,
+          destroyed: feedback.attackerDestroyed, color: 0xffe49b },
+      ];
+      for (const { hexId, damage, destroyed, color } of targets) {
+        const hex = this.map.hexesById.get(hexId);
+        if (!hex || damage === 0) continue;
+        const position = hexCenter(hex, this.map.definition.grid);
+        const label = new Text({
+          text: destroyed ? `−${damage}  ✕` : `−${damage}`,
+          style: { fontFamily: FONT, fontSize: 18, fontWeight: 'bold',
+            fill: color, stroke: { color: 0x182c35, width: 4 } },
+        });
+        label.anchor.set(0.5, 0.5);
+        label.position.set(position.x, position.y - 33);
+        this.feedbackLayer.addChild(label);
+        this.feedbackTextNodes.push(label);
+      }
+    }
+    this.updateCamera();
+  }
+
   /** Renderer owns interaction visuals; Gameplay owns route calculations. */
   setSelection(
     selectedUnitId: string | null,
@@ -363,6 +433,7 @@ export class MapRenderer {
     this.world.position.set(this.cameraX, this.cameraY);
     this.world.scale.set(this.scale);
     for (const marker of this.unitMarkers) marker.scale.set(1 / this.scale);
+    for (const label of this.feedbackTextNodes) label.scale.set(1 / this.scale);
     const detailed = this.scale >= this.fitScale * 0.8;
     for (const marker of this.cityMarkers) {
       marker.node.scale.set(1 / this.scale);
