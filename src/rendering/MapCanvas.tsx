@@ -5,6 +5,9 @@ import { loadScenario } from '../gameplay/ScenarioLoader.ts';
 import { buildRenderSnapshot } from '../gameplay/RenderSnapshotBuilder.ts';
 import { MapRenderer } from './MapRenderer.ts';
 import type { RenderSnapshot } from '../contracts/RenderSnapshot.ts';
+import type { ActionMapFeedback } from '../contracts/ActionMapFeedback.ts';
+import type { CitySettlementResult, NeighborClaimStatus } from '../gameplay/CityOccupation.ts';
+import { UNIT_RULES } from '../gameplay/Units.ts';
 
 type TurnHud = {
   readonly round: number;
@@ -26,12 +29,52 @@ function createTurnHud(snapshot: RenderSnapshot): TurnHud {
   };
 }
 
+
+type ActionReport = {
+  readonly kind: 'combat' | 'occupation' | 'settlement' | 'movement';
+  readonly title: string;
+  readonly summary: string;
+  readonly details: readonly string[];
+};
+
+const STATUS_LABELS: Readonly<Record<NeighborClaimStatus, string>> = {
+  claimed: '已接管',
+  alreadyControlled: '原已控制',
+  ocean: '海洋',
+  outsideProvince: '超出本省',
+  otherCity: '其他城市',
+  enemyGarrison: '敌方驻军',
+  enemyZoc: '敌方行政阻断 ZOC',
+  contested: '多国接管冲突',
+};
+
+function settlementReport(result: CitySettlementResult, world: GameWorld): ActionReport {
+  const cities = result.settledCityIds.map(id => world.map.citiesById.get(id)?.name ?? id);
+  const excluded = result.outcomes.filter(item =>
+    item.status !== 'claimed' && item.status !== 'alreadyControlled',
+  );
+  const details = excluded.map(item => {
+    const city = world.map.citiesById.get(item.cityId)?.name ?? item.cityId;
+    const blockers = item.blockerUnitIds.length ? ' · 单位 ' + item.blockerUnitIds.join('、') : '';
+    return city + ' / Hex ' + item.hexId + '：' + STATUS_LABELS[item.status] + blockers;
+  });
+  const unchangedCount = result.outcomes.filter(item => item.status === 'alreadyControlled').length;
+  return {
+    kind: 'settlement',
+    title: '行政接管 · ' + cities.join('、'),
+    summary: '已接管 ' + result.claims.length + ' Hex · 原已控制 ' + unchangedCount + ' · 其他未接管 ' + excluded.length,
+    details,
+  };
+}
+
 /** React is only the host/composition root, not the map simulation or renderer. */
 export function MapCanvas() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [turnHud, setTurnHud] = useState<TurnHud | null>(null);
   const [lastSettlement, setLastSettlement] = useState<string | null>(null);
+  const [actionReport, setActionReport] = useState<ActionReport | null>(null);
+  const dismissReportRef = useRef<(() => void) | null>(null);
   const endTurnRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -42,6 +85,11 @@ export function MapCanvas() {
     let renderer: MapRenderer | undefined;
     let gameWorld: GameWorld | undefined;
     let selectedUnitId: string | null = null;
+
+    dismissReportRef.current = () => {
+      setActionReport(null);
+      renderer?.setActionFeedback(null);
+    };
 
     const publish = (): void => {
       if (!renderer || !gameWorld || abort.signal.aborted) return;
@@ -56,6 +104,18 @@ export function MapCanvas() {
       setLastSettlement(result.settledCityIds.length
         ? `城市结算：${result.settledCityIds.length} 座 / 接管 ${result.claims.length} Hex`
         : null);
+      if (result.settledCityIds.length) {
+        setActionReport(settlementReport(result, gameWorld));
+        const allowed = new Set(['claimed','enemyGarrison','enemyZoc','outsideProvince','otherCity','contested']);
+        const hexes = result.outcomes.filter(item => allowed.has(item.status)).map(item => ({
+          hexId: item.hexId,
+          status: item.status,
+        })) as Extract<ActionMapFeedback, { kind: 'city-settlement' }>['hexes'];
+        renderer.setActionFeedback({ kind: 'city-settlement', hexes });
+      } else {
+        setActionReport(null);
+        renderer.setActionFeedback(null);
+      }
       selectedUnitId = null; // Never carry a country's selection into another turn.
       publish();
       renderer.setSelection(null, [], []);
@@ -68,9 +128,33 @@ export function MapCanvas() {
       if (standingUnit && selected && standingUnit.countryId !== selected.countryId &&
         gameWorld.attackableFor(selected.id).has(hexId)) {
         // A selected unit attacks an in-range enemy instead of selecting it.
-        gameWorld.attackUnit(selected.id, hexId);
+        const result = gameWorld.attackUnit(selected.id, hexId);
+        const defenderName = gameWorld.scenario.countries.find(c => c.id === standingUnit.countryId)?.name ?? standingUnit.countryId;
+        setLastSettlement(null);
+        setActionReport({
+          kind: 'combat',
+          title: result.defenderDestroyed ? '攻击成功 · 敌军被消灭' : '战斗结算',
+          summary: '对 ' + defenderName + ' · ' + UNIT_RULES[standingUnit.kind].label +
+            ' 造成 ' + result.damageToDefender + ' HP 伤害',
+          details: [
+            result.counterattacked
+              ? '防守方反击造成 ' + result.damageToAttacker + ' HP 伤害（使用受击后的 HP）'
+              : result.defenderDestroyed ? '防守方被消灭，无法反击' : '攻击方不在防守方射程内，无法反击',
+            '攻击方剩余 ' + result.attackerRemainingHp + ' HP / 防守方剩余 ' + result.defenderRemainingHp + ' HP',
+            '攻击不消耗 MP，且不会自动占领敌方 Hex',
+          ],
+        });
+        renderer.setActionFeedback({
+          kind: 'combat',
+          attackerHexId: selected.hexId,
+          defenderHexId: standingUnit.hexId,
+          damageToDefender: result.damageToDefender,
+          damageToAttacker: result.damageToAttacker,
+          defenderDestroyed: result.defenderDestroyed,
+          attackerDestroyed: result.attackerDestroyed,
+        });
         if (!gameWorld.unitById(selected.id)) selectedUnitId = null;
-        publish()
+        publish();
       } else if (standingUnit) {
         // In hot-seat mode, enemy units remain visible, but only the active
         // country's units may be selected and issued commands.
@@ -78,8 +162,27 @@ export function MapCanvas() {
           ? standingUnit.id
           : null;
       } else if (selectedUnitId && gameWorld.reachableFor(selectedUnitId).has(hexId)) {
+        const route = gameWorld.reachableFor(selectedUnitId).get(hexId)!;
+        const movingUnit = gameWorld.unitById(selectedUnitId)!;
+        const enteredCities = gameWorld.map.cities.filter(city =>
+          route.hexIds.slice(1).includes(city.hexId) &&
+          gameWorld!.controllerOf(city.hexId) !== movingUnit.countryId,
+        );
         gameWorld.moveUnit(selectedUnitId, hexId);
-        renderer.submitSnapshot(buildRenderSnapshot(gameWorld));
+        setLastSettlement(null);
+        renderer.setActionFeedback(null);
+        setActionReport(enteredCities.length ? {
+          kind: 'occupation',
+          title: '夺取城市 · ' + enteredCities.map(city => city.name).join('、'),
+          summary: '城市 Hex 已归我方控制，邻格将在本国结束回合时统一结算',
+          details: ['本次移动消耗 ' + route.cost + ' MP', '敌军驻守与行政阻断 ZOC 可能阻止周边接管'],
+        } : {
+          kind: 'movement',
+          title: '部队移动完成',
+          summary: '消耗 ' + route.cost + ' MP · 剩余 ' + gameWorld.unitById(selectedUnitId)!.mpRemaining + ' MP',
+          details: [],
+        });
+        publish();
       } else {
         selectedUnitId = null;
       }
@@ -115,6 +218,7 @@ export function MapCanvas() {
     return () => {
       abort.abort();
       endTurnRef.current = null;
+      dismissReportRef.current = null;
       renderer?.destroy();
     };
   }, []);
@@ -142,6 +246,27 @@ export function MapCanvas() {
           结束回合
         </button>
       </div>
+    )}
+    {actionReport && (
+      <section className={'action-report action-report--' + actionReport.kind} aria-label="行动结果">
+        <div className="action-report__header">
+          <strong>{actionReport.title}</strong>
+          <button type="button" className="action-report__close"
+            aria-label="关闭行动结果" onClick={() => dismissReportRef.current?.()}>×</button>
+        </div>
+        <p className="action-report__summary" role="status">{actionReport.summary}</p>
+        {actionReport.kind === 'settlement' && (
+          <div className="action-report__legend" aria-label="地图反馈图例">
+            <span>绿色：接管成功</span><span>橙红：敌军阻断</span><span>灰紫：省界／城市／冲突</span>
+          </div>
+        )}
+        {actionReport.details.length > 0 && (
+          <details className="action-report__details">
+            <summary>查看详细结果（{actionReport.details.length}）</summary>
+            <ul>{actionReport.details.map((detail, index) => <li key={index}>{detail}</li>)}</ul>
+          </details>
+        )}
+      </section>
     )}
     {loadingError && (
       <div className="map-error" role="alert">

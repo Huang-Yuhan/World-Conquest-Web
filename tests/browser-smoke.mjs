@@ -107,6 +107,11 @@ try {
   assert.notDeepEqual(afterCombat, beforeCombat,
     'Attacking a red enemy Hex must update visible HP and attack state');
   assert.deepEqual(errors, [], 'Browser combat interaction caused an error');
+  const combatReport = page.locator('.action-report');
+  assert.match(await combatReport.innerText(), /战斗结算/);
+  assert.match(await combatReport.innerText(), /造成.*HP 伤害/);
+  await combatReport.locator('summary').click();
+  assert.match(await combatReport.innerText(), /反击/);
   console.log('Ground combat click changed HP bars and exhausted the attack indicator');
 
   // Validate real HTML button clicks without repeated WebGL screenshots.
@@ -158,10 +163,16 @@ try {
   await cityPage.mouse.click(screen(2, 5).x, screen(2, 5).y);
   assert.equal(await cityPage.locator('.turn-hud__settlement').count(), 0,
     'City capture must not trigger administration before turn settlement');
+  assert.match(await cityPage.locator('.action-report').innerText(), /夺取城市/);
+  assert.match(await cityPage.locator('.action-report').innerText(), /结束回合时统一结算/);
   await cityPage.getByRole('button', { name: '结束回合' }).click();
   await cityPage.locator('.turn-hud__settlement').waitFor({ timeout: 10000 });
   assert.match(await cityPage.locator('.turn-hud__settlement').innerText(), /接管 5 Hex/,
     'End turn must automatically claim the five eligible adjacent land Hexes');
+  assert.match(await cityPage.locator('.action-report__summary').innerText(), /已接管 5 Hex/);
+  assert.equal(await cityPage.locator('.action-report__legend').count(), 1);
+  await cityPage.getByRole('button', { name: '关闭行动结果' }).click();
+  assert.equal(await cityPage.locator('.action-report').count(), 0);
   await cityPage.getByRole('button', { name: '结束回合' }).click();
   assert.equal(await cityPage.locator('.turn-hud__settlement').count(), 0,
     'The city capture event must only settle once');
