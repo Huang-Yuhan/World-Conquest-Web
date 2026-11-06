@@ -89,6 +89,7 @@ body {
   min-width: 120px;
 }
 .turn-hud__round { color: #b2c5ca; font-size: 11px; }
+.turn-hud__settlement { color: #dfcb9c; font-size: 11px; white-space: nowrap; }
 .turn-hud__country { display: inline-flex; gap: 7px; align-items: center; white-space: nowrap; font-weight: 600; }
 .turn-hud__swatch { width: 10px; height: 10px; border-radius: 3px; border: 1px solid #ffffff55; }
 .turn-hud__next {

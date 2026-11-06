@@ -31,6 +31,7 @@ export function MapCanvas() {
   const hostRef = useRef<HTMLDivElement>(null);
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [turnHud, setTurnHud] = useState<TurnHud | null>(null);
+  const [lastSettlement, setLastSettlement] = useState<string | null>(null);
   const endTurnRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -51,7 +52,10 @@ export function MapCanvas() {
 
     endTurnRef.current = () => {
       if (!renderer || !gameWorld || abort.signal.aborted) return;
-      gameWorld.endTurn();
+      const result = gameWorld.endTurn();
+      setLastSettlement(result.settledCityIds.length
+        ? `城市结算：${result.settledCityIds.length} 座 / 接管 ${result.claims.length} Hex`
+        : null);
       selectedUnitId = null; // Never carry a country's selection into another turn.
       publish();
       renderer.setSelection(null, [], []);
@@ -132,6 +136,7 @@ export function MapCanvas() {
             <span className="turn-hud__swatch" style={{ backgroundColor: `#${turnHud.color.toString(16).padStart(6, '0')}` }} />
             {turnHud.countryName}
           </span>
+          {lastSettlement && <span className="turn-hud__settlement" role="status">{lastSettlement}</span>}
         </div>
         <button type="button" className="turn-hud__next" onClick={() => endTurnRef.current?.()}>
           结束回合
